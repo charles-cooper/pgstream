@@ -100,41 +100,80 @@ data Row = Row
 
 type FieldParser a = (PQ.Oid, Int, Maybe ByteString) -> a
 
+-- sloww check for correct type
+checkTy :: HasPQType a => PQ.Oid -> a -> a
+checkTy oid a = if pqType a == oid then a
+  else throw $
+    Incompatible $
+         "Type error. Expected pq typeoid "
+      ++ show (pqType a)
+      ++ " but got "
+      ++ show oid
+      ++ "."
+
+class HasPQType a where
+  pqType :: a -> PQ.Oid
+
+instance HasPQType Bool where
+    PQ.Oid 16   -> 1                  -- bool
+    PQ.Oid 23   -> 4                  -- int4
+    PQ.Oid 20   -> 8                  -- int8
+    PQ.Oid 700  -> 4                  -- float4
+    PQ.Oid 701  -> 8                  -- float8
+    PQ.Oid 25   -> -1                 -- text
+    PQ.Oid 2950 -> -1                 -- uuid
+    PQ.Oid 1007 -> (len - 20) `div` 8 -- int4[]
+    PQ.Oid 1016 -> (len - 20) `div` 8 -- int8[]
+    PQ.Oid 1021 -> (len - 20) `div` 8 -- float4[]
+
 class FromField a where
     -- Unchecked type conversion from raw postgres bytestring
     fromField :: (PQ.Oid, Int, Maybe ByteString) -> a
 
 -- int2
+instance HasPQType Int16 where
+  pqType _ = PQ.Oid 21
 instance FromField Int16 where
     fromField (ty, length, Just bs) = case PD.run PD.int bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null int2"
 
 -- int4
+instance HasPQType Int32 where
+  pqType _ = PQ.Oid 23
 instance FromField Int32 where
     fromField (ty, length, Just bs) = case PD.run PD.int bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null int4"
 
 -- int8
+instance HasPQType Int64 where
+  pqType _ = PQ.Oid 
 instance FromField Int64 where
     fromField (ty, length, Just bs) = case PD.run PD.int bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null int8"
 
 -- int8
+instance HasPQType Int where
+  pqType _ = pqType (undefined :: Int64)
 instance FromField Int where
     fromField (ty, length, Just bs) = case PD.run PD.int bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null int4"
 
 -- float4
+instance HasPQType Float where
+  pqType _ = PQ.Oid
 instance FromField Float where
     fromField (ty, length, Just bs) = case PD.run PD.float4 bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null float4"
 
 -- float8
+instance HasPQType Double where
+  pqType _ = PQ.Oid
 instance FromField Double where
     fromField (ty, length, Just bs) = case PD.run PD.float8 bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null float8"
 
 -- integer
+instance HasPQType 
 instance FromField Integer where
     fromField (ty, length, Just bs) = case PD.run PD.int bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null integer"
@@ -177,6 +216,8 @@ instance FromField BL.ByteString where
     fromField _ = throw $ ConversionError "Excepted non-null bytea"
 
 -- bool
+instance HasPQType Bool where
+  pqType _ = PQ.Oid 16
 instance FromField Bool where
     fromField (ty, length, Just bs) = case PD.run PD.bool bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null bool"
