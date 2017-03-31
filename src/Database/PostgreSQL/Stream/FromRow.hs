@@ -123,14 +123,14 @@ class HasPQType a => FromField a where
 
 -- int2
 instance HasPQType Int16 where
-  pqType _ = PQ.Oid 21 --INT2OID
+  pqType _ = PQ.Oid 21 -- INT2OID
 instance FromField Int16 where
     fromField (ty, length, Just bs) = case PD.run PD.int bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null int2"
 
 -- int4
 instance HasPQType Int32 where
-  pqType _ = PQ.Oid 23 --INT4OID
+  pqType _ = PQ.Oid 23 -- INT4OID
 instance FromField Int32 where
     fromField (ty, length, Just bs) = case PD.run PD.int bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null int4"
@@ -144,7 +144,7 @@ instance FromField Int64 where
 
 -- int8
 instance HasPQType Int where
-  pqType _ = pqType (undefined :: Int64)
+  pqType _ = PQ.Oid 20 -- INT8OID
 instance FromField Int where
     fromField (ty, length, Just bs) = case PD.run PD.int bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null int4"
