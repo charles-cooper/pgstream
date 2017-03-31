@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Database.PostgreSQL.Stream.FromRow (
   FromRow(..),
@@ -237,50 +238,50 @@ instance FromField Day where
 -- time
 -- the following cases only work when integer_datetimes is set to 'on'
 -- TODO add a fallback case
-instance PQType TimeOfDay where
+instance HasPQType TimeOfDay where
   pqType _ = PQ.Oid 1083 -- TIMEOID
 instance FromField TimeOfDay where
     fromField (ty, length, Just bs) = case PD.run PD.time_int bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null date"
 
-instance PQType (TimeOfDay, TimeZone) where
+instance HasPQType (TimeOfDay, TimeZone) where
   pqType _ = PQ.Oid 1266 -- TIMETZOID
 instance FromField (TimeOfDay, TimeZone) where
     fromField (ty, length, Just bs) = case PD.run PD.timetz_int bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null date"
 
-instance PQType UTCTime where
+instance HasPQType UTCTime where
   pqType _ = PQ.Oid 1184 -- TIMESTAMPTZOID
 instance FromField UTCTime where
     fromField (ty, length, Just bs) = case PD.run PD.timestamptz_int bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null date"
 
-instance PQType NominalDiffTime where
+instance HasPQType NominalDiffTime where
   pqType _ = PQ.Oid 20 -- INT8OID
 instance FromField NominalDiffTime where
     fromField (ty, length, Just bs) = case PD.run PD.int bs of { Right x -> (fromIntegral (x :: Int)) }
     fromField _ = throw $ ConversionError "Excepted non-null date"
 
-instance PQType DiffTime where
+instance HasPQType DiffTime where
   pqType _ = PQ.Oid 1186 -- INTERVALOID
 instance FromField DiffTime where
     fromField (ty, length, Just bs) = case PD.run PD.interval_int bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null date"
 
-instance PQType LocalTime where
+instance HasPQType LocalTime where
   pqType _ = PQ.Oid 1114 -- TIMESTAMPOID
 instance FromField LocalTime where
     fromField (ty, length, Just bs) = case PD.run PD.timestamp_int bs of { Right x -> x }
     fromField _ = throw $ ConversionError "Excepted non-null date"
 
 -- money
-instance PQType (Fixed E3) where
+instance HasPQType (Fixed E3) where
   pqType _ = PQ.Oid
 instance FromField (Fixed E3) where
     fromField (ty, length, Just bs) = case PD.run PD.int bs of { Right x -> fromIntegral (x :: Int) / 100 }
     fromField _ = throw $ ConversionError "Excepted non-null money"
 
-instance PQType (Fixed E2) where
+instance HasPQType (Fixed E2) where
   pqType _ = PQ.Oid
 instance FromField (Fixed E2) where
     fromField (ty, length, Just bs) = case PD.run PD.int bs of { Right x -> fromIntegral (x :: Int) / 100 }
@@ -414,7 +415,7 @@ int4vector = extractor extract_int4_array
 -------------------------------------------------------------------------------
 
 -- | Result set field
-field :: FromField a => RowParser a
+field :: (HasPQType a, FromField a) => RowParser a
 field = fieldWith fromField
 
 newtype RowParser a = RP { unRP :: (Row -> PQ.Column -> (PQ.Column, a)) }
@@ -446,7 +447,10 @@ fieldWith fieldP = RP $ \(Row {..}) column ->
     !typeOid = unsafeDupablePerformIO $ PQ.ftype result column
     !len     = unsafeDupablePerformIO $ PQ.getlength result row column
     !buffer  = unsafeDupablePerformIO $ PQ.getvalue result row column
-  in (succ column, fieldP (typeOid, calculateSize typeOid len, buffer))
+    res      = fieldP (typeOid, calculateSize typeOid len, buffer)
+  in (,) (succ column) $ case row of
+    PQ.Row 0 -> checkTy typeOid res
+    _ -> res
 
 -------------------------------------------------------------------------------
 -- Result Sets
