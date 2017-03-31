@@ -117,8 +117,8 @@ checkTy oid a = if pqType a == oid then a
 class HasPQType a where
   pqType :: a -> PQ.Oid
 
-class FromField a where
-    -- Unchecked type conversion from raw postgres bytestring
+class HasPQType a => FromField a where
+    -- conversion from raw postgres bytestring
     fromField :: (PQ.Oid, Int, Maybe ByteString) -> a
 
 -- int2
@@ -276,13 +276,13 @@ instance FromField LocalTime where
 
 -- money
 instance HasPQType (Fixed E3) where
-  pqType _ = PQ.Oid
+  pqType _ = PQ.Oid 20 -- INT8OID
 instance FromField (Fixed E3) where
     fromField (ty, length, Just bs) = case PD.run PD.int bs of { Right x -> fromIntegral (x :: Int) / 100 }
     fromField _ = throw $ ConversionError "Excepted non-null money"
 
 instance HasPQType (Fixed E2) where
-  pqType _ = PQ.Oid
+  pqType _ = PQ.Oid 20 -- INT8OID
 instance FromField (Fixed E2) where
     fromField (ty, length, Just bs) = case PD.run PD.int bs of { Right x -> fromIntegral (x :: Int) / 100 }
     fromField _ = throw $ ConversionError "Excepted non-null money"
@@ -296,14 +296,14 @@ instance FromField a => FromField (Maybe a) where
 
 -- int4[]
 instance HasPQType (V.Vector Int32) where
-  pqType _ = PQ.Oid
+  pqType _ = PQ.Oid 1007 -- INT4ARRAYOID
 instance FromField (V.Vector Int32) where
     fromField (ty, arrlength, Just bs) = unsafeDupablePerformIO $ int4vector bs arrlength
     fromField _ = throw $ ConversionError "Excepted non-null int4[]"
 
 -- float4[]
 instance HasPQType (V.Vector Float) where
-  pqType _ = PQ.Oid
+  pqType _ = PQ.Oid 1021 -- FLOAT4ARRAYOID
 instance FromField (V.Vector Float) where
     fromField (ty, arrlength, Just bs) = unsafeDupablePerformIO $ float32vector bs arrlength
     fromField _ = throw $ ConversionError "Excepted non-null float4[]"
@@ -416,7 +416,7 @@ int4vector = extractor extract_int4_array
 
 -- | Result set field
 field :: (HasPQType a, FromField a) => RowParser a
-field = fieldWith fromField
+field = fieldWith checkTy fromField
 
 newtype RowParser a = RP { unRP :: (Row -> PQ.Column -> (PQ.Column, a)) }
 
@@ -440,8 +440,8 @@ instance Monad RowParser where
 runRowParser :: RowParser a -> Row -> a
 runRowParser (RP p) r = snd (p r 0)
 
-fieldWith :: FieldParser a -> RowParser a
-fieldWith fieldP = RP $ \(Row {..}) column ->
+fieldWith :: (PQ.Oid -> a -> a) -> FieldParser a -> RowParser a
+fieldWith checkTy fieldP = RP $ \(Row {..}) column ->
   let
     !result  = rowresult
     !typeOid = unsafeDupablePerformIO $ PQ.ftype result column
